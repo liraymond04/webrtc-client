@@ -3,12 +3,17 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 #include <uuid/uuid.h>
 
 #define MAX_PEERS 3
 rtcConfiguration config;
 
 int ws_id;
+pthread_mutex_t lock;
+pthread_cond_t cond;
+int ws_joined = 0;
+int ws_ret_code = 0;
 
 char username[256];
 char room[256] = "\0";
@@ -69,29 +74,49 @@ int main() {
     uuid(username);
     printf("Your uuid is %s\n", username);
 
+    printf("Room code: ");
+    scanf("%s", room);
+
     char url[256];
-    snprintf(url, 256, "%s?user=%s", ws_url, username);
+    snprintf(url, 256, "%s?user=%s&room=%s", ws_url, username, room);
 
     ws_id = rtcCreateWebSocket(url);
+
+    pthread_mutex_init(&lock, NULL);
+    pthread_cond_init(&cond, NULL);
 
     rtcSetOpenCallback(ws_id, onOpen);
     rtcSetClosedCallback(ws_id, onClosed);
     rtcSetErrorCallback(ws_id, onError);
     rtcSetMessageCallback(ws_id, onMessage);
 
+    // block until websocket connection is complete
+    pthread_mutex_lock(&lock);
+    while (!ws_joined) {
+        pthread_cond_wait(&cond, &lock);
+    }
+    pthread_mutex_unlock(&lock);
+
+    // cleanup thread blocking
+    pthread_mutex_destroy(&lock);
+    pthread_cond_destroy(&cond);
+
+    if (ws_ret_code) {
+        exit(ws_ret_code);
+    }
+
+    printf("done\n");
+
+    sendNegotiation("HANDLE_CONNECTION", NULL);
+
     int ret = 1;
     while (ret) {
-        printf("0: Exit\t1: Enter room\t2: Send message\n");
+        printf("0: Exit\t\t1: Send message\n");
         printf("Enter a command: ");
         scanf("%d", &ret);
 
         switch (ret) {
         case 1:
-            printf("Room code: ");
-            scanf("%s", room);
-            sendNegotiation("HANDLE_CONNECTION", NULL);
-            break;
-        case 2:
             if (dataChannelCount > 0) {
                 char message[256];
                 printf("Enter message: ");
@@ -119,15 +144,28 @@ int main() {
 
 void onOpen(int id, void *ptr) {
     printf("\nwebsocket connection opened (id: %d)\n", id);
+    pthread_mutex_lock(&lock);
+    ws_joined = 1;
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&lock);
 }
 
 void onClosed(int id, void *ptr) {
     printf("\nwebsocket connection closed (id: %d)\n", id);
+    pthread_mutex_lock(&lock);
+    ws_joined = 1;
+    ws_ret_code = 0;
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&lock);
 }
 
 void onError(int id, const char *error, void *ptr) {
     fprintf(stderr, "\nwebsocket connection error (id: %d)\n", id);
-    exit(1);
+    pthread_mutex_lock(&lock);
+    ws_joined = 1;
+    ws_ret_code = 1;
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&lock);
 }
 
 void onMessage(int id, const char *message, int size, void *ptr) {

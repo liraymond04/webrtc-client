@@ -5,7 +5,7 @@
 #include <string.h>
 #include <uuid/uuid.h>
 
-#define MAX_PEERS 9999
+#define MAX_PEERS 3
 rtcConfiguration config;
 
 int ws_id;
@@ -23,6 +23,7 @@ void sendOneToOneNegotiation(const char *type, const char *endpoint,
                              const char *sdp);
 
 void connectPeers(json_object *root);
+void rejectPeers(json_object *root);
 void processOffer(const char *requestee, const char *remoteOffer);
 
 void onOpen(int id, void *ptr);
@@ -125,7 +126,8 @@ void onClosed(int id, void *ptr) {
 }
 
 void onError(int id, const char *error, void *ptr) {
-    printf("\nwebsocket connection error (id: %d)\n", id);
+    fprintf(stderr, "\nwebsocket connection error (id: %d)\n", id);
+    exit(1);
 }
 
 void onMessage(int id, const char *message, int size, void *ptr) {
@@ -142,7 +144,12 @@ void onMessage(int id, const char *message, int size, void *ptr) {
 
         if (strcmp(type_str, "HANDLE_CONNECTION") == 0) {
             printf("New peer wants to connect\n");
-            connectPeers(root);
+            if (dataChannelCount < MAX_PEERS) {
+                connectPeers(root);
+            } else {
+                printf("Max peers connected\n");
+                rejectPeers(root);
+            }
         } else if (strcmp(type_str, "offer") == 0) {
             json_object *from = json_object_object_get(root, "from");
             json_object *data = json_object_object_get(root, "data");
@@ -150,6 +157,10 @@ void onMessage(int id, const char *message, int size, void *ptr) {
             printf("THE NODE IS %s\n", json_object_get_string(from));
             processOffer(json_object_get_string(from),
                          json_object_get_string(data));
+        } else if (strcmp(type_str, "REJECT_CONNECTION") == 0) {
+            json_object *data = json_object_object_get(root, "data");
+            printf("Connection offer rejected: %s\n",
+                   json_object_get_string(data));
         }
     }
 
@@ -268,6 +279,12 @@ bool shouldRepond(json_object *root) {
 
     return strcmp(from_str, username) != 0 &&
            (strcmp(endpoint_str, username) == 0 || strcmp(room_str, room) == 0);
+}
+
+void rejectPeers(json_object *root) {
+    json_object *from = json_object_object_get(root, "from");
+    sendOneToOneNegotiation("REJECT_CONNECTION", json_object_get_string(from),
+                            "Max peers connected");
 }
 
 void sendNegotiation(const char *type, json_object *data) {

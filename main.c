@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <uuid/uuid.h>
 
 #define MAX_PEERS 3
@@ -39,7 +40,6 @@ void onMessage(int id, const char *message, int size, void *ptr);
 void sendOfferDescriptionCallback(int pc, const char *sdp, const char *type,
                                   void *ptr);
 
-int pc;
 int messageListener = 0;
 
 char *uuid(char out[UUID_STR_LEN]) {
@@ -206,10 +206,10 @@ void onMessage(int id, const char *message, int size, void *ptr) {
         if (strcmp(type_str, "answer") == 0) {
             json_object *data = json_object_object_get(root, "data");
             printf("--- GOT ANSWER IN CONNECT ---\n");
-            rtcSetRemoteDescription(pc, json_object_get_string(data), "answer");
+            rtcSetRemoteDescription(messageListener, json_object_get_string(data), "answer");
         } else if (strcmp(type_str, "candidate") == 0) {
             json_object *data = json_object_object_get(root, "data");
-            rtcAddRemoteCandidate(pc, json_object_get_string(data), NULL);
+            rtcAddRemoteCandidate(messageListener, json_object_get_string(data), NULL);
         }
     }
 }
@@ -251,7 +251,7 @@ void connectPeers(json_object *root) {
 
     json_object *data = json_object_object_get(root, "data");
 
-    pc = rtcCreatePeerConnection(&config);
+    int pc = rtcCreatePeerConnection(&config);
     rtcSetUserPointer(pc, (void *)json_object_get_string(data));
     rtcSetLocalDescriptionCallback(pc, sendOfferDescriptionCallback);
 
@@ -259,7 +259,7 @@ void connectPeers(json_object *root) {
 
     printf("created data channel\n");
 
-    messageListener = 1;
+    messageListener = pc;
 
     rtcSetLocalCandidateCallback(pc, candidateConnectPeersCallback);
 
@@ -286,8 +286,6 @@ void processOfferDataChannelCallback(int pc, int dc, void *ptr) {
     rtcSetOpenCallback(dc, onDataChannelOpen);
     rtcSetMessageCallback(dc, onDataChannelMessage);
     rtcSetClosedCallback(dc, onDataChannelClose);
-    // printf("Data channel is open and ready to be used.\n");
-    // dataChannel[dataChannelCount++] = dc;
 }
 
 void processOffer(const char *requestee, const char *remoteOffer) {
@@ -333,7 +331,7 @@ void sendNegotiation(const char *type, json_object *data) {
 
     json_object *root = json_object_new_object();
     json_object_object_add(root, "protocol",
-                           json_object_new_string("one-to-all"));
+                           json_object_new_string("one-to-room"));
     json_object_object_add(root, "room", json_object_new_string(room));
     json_object_object_add(root, "from", json_object_new_string(username));
     json_object_object_add(root, "endpoint", json_object_new_string("any"));

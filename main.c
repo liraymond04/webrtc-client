@@ -13,8 +13,6 @@ int ws_id;
 char username[256];
 char room[256] = "\0";
 
-const char *requestees[MAX_PEERS];
-
 int dataChannel[MAX_PEERS];
 int dataChannelCount = 0;
 
@@ -169,9 +167,9 @@ void onMessage(int id, const char *message, int size, void *ptr) {
 
 void sendOfferDescriptionCallback(int pc, const char *sdp, const char *type,
                                   void *ptr) {
-
+    const char *requestee = (const char *)ptr;
     rtcSetLocalDescription(pc, sdp);
-    sendOneToOneNegotiation("offer", requestees[pc], sdp);
+    sendOneToOneNegotiation("offer", requestee, sdp);
     printf("------ SEND OFFER ------\n");
 }
 
@@ -192,9 +190,10 @@ void onDataChannelClose(int id, void *ptr) {
 
 void candidateConnectPeersCallback(int pc, const char *cand, const char *mid,
                                    void *ptr) {
+    const char *requestee = (const char *)ptr;
     if (cand != NULL) {
         printf("sent negotiations\n");
-        sendOneToOneNegotiation("candidate", requestees[pc], cand);
+        sendOneToOneNegotiation("candidate", requestee, cand);
     }
 }
 
@@ -204,7 +203,7 @@ void connectPeers(json_object *root) {
     json_object *data = json_object_object_get(root, "data");
 
     pc = rtcCreatePeerConnection(&config);
-    requestees[pc] = json_object_get_string(data);
+    rtcSetUserPointer(pc, (void *)json_object_get_string(data));
     rtcSetLocalDescriptionCallback(pc, sendOfferDescriptionCallback);
 
     int dc = rtcCreateDataChannel(pc, "sendChannel");
@@ -222,14 +221,16 @@ void connectPeers(json_object *root) {
 
 void sendAnswerDescriptionCallback(int pc, const char *sdp, const char *type,
                                    void *ptr) {
+    const char *requestee = (const char *)ptr;
     rtcSetLocalDescription(pc, sdp);
-    sendOneToOneNegotiation("answer", requestees[pc], sdp);
+    sendOneToOneNegotiation("answer", requestee, sdp);
     printf("------ SEND ANSWER ------\n");
 }
 
 void candidateProcessOfferCallback(int pc, const char *cand, const char *mid,
                                    void *ptr) {
-    sendOneToOneNegotiation("candidate", requestees[pc], cand);
+    const char *requestee = (const char *)ptr;
+    sendOneToOneNegotiation("candidate", requestee, cand);
 }
 
 void processOfferDataChannelCallback(int pc, int dc, void *ptr) {
@@ -244,7 +245,8 @@ void processOffer(const char *requestee, const char *remoteOffer) {
     printf("RUNNING PROCESS OFFER\n");
 
     int pc = rtcCreatePeerConnection(&config);
-    requestees[pc] = requestee;
+    rtcSetUserPointer(pc, (void *)requestee);
+
     rtcSetLocalDescriptionCallback(pc, sendAnswerDescriptionCallback);
 
     rtcSetLocalCandidateCallback(pc, candidateProcessOfferCallback);

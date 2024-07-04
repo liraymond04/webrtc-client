@@ -206,10 +206,12 @@ void onMessage(int id, const char *message, int size, void *ptr) {
         if (strcmp(type_str, "answer") == 0) {
             json_object *data = json_object_object_get(root, "data");
             printf("--- GOT ANSWER IN CONNECT ---\n");
-            rtcSetRemoteDescription(messageListener, json_object_get_string(data), "answer");
+            rtcSetRemoteDescription(messageListener,
+                                    json_object_get_string(data), "answer");
         } else if (strcmp(type_str, "candidate") == 0) {
             json_object *data = json_object_object_get(root, "data");
-            rtcAddRemoteCandidate(messageListener, json_object_get_string(data), NULL);
+            rtcAddRemoteCandidate(messageListener, json_object_get_string(data),
+                                  NULL);
         }
     }
 }
@@ -234,6 +236,14 @@ void onDataChannelMessage(int id, const char *message, int size, void *ptr) {
 
 void onDataChannelClose(int id, void *ptr) {
     printf("\nData channel closed\n");
+    int found = 0;
+    for (int i = 0; i < dataChannelCount - 1; i++) {
+        if (dataChannel[i] == id)
+            found = 1;
+        if (found)
+            dataChannel[i] = dataChannel[i + 1];
+    }
+    dataChannelCount--;
     messageListener = 0;
 }
 

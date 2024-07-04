@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
-#include <unistd.h>
 #include <uuid/uuid.h>
 
 #define MAX_PEERS 3

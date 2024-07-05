@@ -29,6 +29,25 @@ if (NOT libdatachannel_FOUND)
     endif()
 endif()
 
+find_package(json-c QUIET)
+if (NOT json-C_FOUND)
+    FetchContent_Declare(
+        json-c
+        GIT_REPOSITORY https://github.com/json-c/json-c.git
+        GIT_TAG 6e481aa06166c2b31e391005c6e50f0adef5e4d4
+        GIT_PROGRESS TRUE
+        GIT_SHALLOW false
+    )
+    FetchContent_GetProperties(json-c)
+    if (NOT libdatachannel_POPULATED)
+        set(FETCHCONTENT_QUIET NO)
+        FetchContent_Populate(libdatachannel)
+        set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+        set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        add_subdirectory(${json-c_SOURCE_DIR} ${json-c_BINARY_DIR})
+    endif()
+endif()
+
 add_executable(${PROJECT_NAME} main.c)
 
 target_link_libraries(${PROJECT_NAME} datachannel json-c uuid)

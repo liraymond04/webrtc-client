@@ -6,8 +6,6 @@ Requires a signalling server, [rustysignal](https://github.com/liraymond04/rusty
 
 ## Building
 
-Install [json-c](https://github.com/json-c/json-c) to your system following the GitHub page instructions (TODO: add to FetchContent so user is not required to install onto their system)
-
 Prerequesites are `cmake`, `ninja`, and `gcc`, which you can install with your distribution package manager
 
 Ex) Arch Linux

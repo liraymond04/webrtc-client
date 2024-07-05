@@ -48,6 +48,8 @@ if (NOT json-C_FOUND)
     endif()
 endif()
 
-add_executable(${PROJECT_NAME} main.c)
+file(GLOB_RECURSE SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+
+add_executable(${PROJECT_NAME} ${SRC_FILES})
 
 target_link_libraries(${PROJECT_NAME} datachannel json-c uuid)

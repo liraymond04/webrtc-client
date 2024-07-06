@@ -16,11 +16,15 @@ static pthread_cond_t *cond;
 static int *ws_joined;
 static int *ws_ret_code;
 
-static void (*message_received_callback)(const char *message) = NULL;
+static void (*message_opened_callback)(int id, void *ptr) = NULL;
+static void (*message_received_callback)(int id, const char *message, int size,
+                                         void *ptr) = NULL;
+static void (*message_closed_callback)(int id, void *ptr) = NULL;
 
 static bool shouldRespond(json_object *root);
 static void sendNegotiation(const char *type, json_object *data);
-static void sendOneToOneNegotiation(const char *type, const char *endpoint, const char *sdp);
+static void sendOneToOneNegotiation(const char *type, const char *endpoint,
+                                    const char *sdp);
 
 static void connectPeers(json_object *root);
 static void rejectPeers(json_object *root);
@@ -31,13 +35,18 @@ static inline void onClosed(int id, void *ptr);
 static inline void onError(int id, const char *error, void *ptr);
 static inline void onMessage(int id, const char *message, int size, void *ptr);
 
-static inline void sendOfferDescriptionCallback(int pc, const char *sdp, const char *type, void *ptr);
+static inline void sendOfferDescriptionCallback(int pc, const char *sdp,
+                                                const char *type, void *ptr);
 static inline void onDataChannelOpen(int id, void *ptr);
-static inline void onDataChannelMessage(int id, const char *message, int size, void *ptr);
+static inline void onDataChannelMessage(int id, const char *message, int size,
+                                        void *ptr);
 static inline void onDataChannelClose(int id, void *ptr);
-static inline void candidateConnectPeersCallback(int pc, const char *cand, const char *mid, void *ptr);
-static inline void sendAnswerDescriptionCallback(int pc, const char *sdp, const char *type, void *ptr);
-static inline void candidateProcessOfferCallback(int pc, const char *cand, const char *mid, void *ptr);
+static inline void candidateConnectPeersCallback(int pc, const char *cand,
+                                                 const char *mid, void *ptr);
+static inline void sendAnswerDescriptionCallback(int pc, const char *sdp,
+                                                 const char *type, void *ptr);
+static inline void candidateProcessOfferCallback(int pc, const char *cand,
+                                                 const char *mid, void *ptr);
 static inline void processOfferDataChannelCallback(int pc, int dc, void *ptr);
 
 void generate_uuid(char out[UUID_STR_LEN]) {
@@ -46,7 +55,9 @@ void generate_uuid(char out[UUID_STR_LEN]) {
     uuid_unparse_lower(b, out);
 }
 
-void rtc_initialize(const char **stun_servers, const char *ws_url, const char *user, const char *rm, pthread_mutex_t *lck, pthread_cond_t *cnd, int *joined, int *ret_code, void (*on_message_received)(const char *message)) {
+void rtc_initialize(const char **stun_servers, const char *ws_url,
+                    const char *user, const char *rm, pthread_mutex_t *lck,
+                    pthread_cond_t *cnd, int *joined, int *ret_code) {
     config.iceServers = stun_servers;
     config.iceServersCount = 1;
 
@@ -57,7 +68,6 @@ void rtc_initialize(const char **stun_servers, const char *ws_url, const char *u
     cond = cnd;
     ws_joined = joined;
     ws_ret_code = ret_code;
-    message_received_callback = on_message_received;
 
     char url[256];
     snprintf(url, 256, "%s?user=%s&room=%s", ws_url, username, room);
@@ -70,21 +80,36 @@ void rtc_initialize(const char **stun_servers, const char *ws_url, const char *u
     rtcSetMessageCallback(ws_id, onMessage);
 }
 
-void rtc_handle_connection() {
-    sendNegotiation("HANDLE_CONNECTION", NULL);
-}
+void rtc_handle_connection() { sendNegotiation("HANDLE_CONNECTION", NULL); }
 
 void rtc_send_message(const char *message) {
     if (dataChannelCount > 0) {
         json_object *root = json_object_new_object();
-        json_object_object_add(root, "sender", json_object_new_string(username));
-        json_object_object_add(root, "payload", json_object_new_string(message));
+        json_object_object_add(root, "sender",
+                               json_object_new_string(username));
+        json_object_object_add(root, "payload",
+                               json_object_new_string(message));
 
         const char *json_str = json_object_to_json_string(root);
         for (int i = 0; i < dataChannelCount; i++) {
             rtcSendMessage(dataChannel[i], json_str, strlen(json_str));
         }
     }
+}
+
+void rtc_set_message_opened_callback(void (*on_message_opened)(int id,
+                                                               void *ptr)) {
+    message_opened_callback = on_message_opened;
+}
+
+void rtc_set_message_received_callback(void (*on_message_received)(
+    int id, const char *message, int size, void *ptr)) {
+    message_received_callback = on_message_received;
+}
+
+void rtc_set_message_closed_callback(void (*on_message_closed)(int id,
+                                                               void *ptr)) {
+    message_closed_callback = on_message_closed;
 }
 
 static inline void onOpen(int id, void *ptr) {
@@ -138,10 +163,12 @@ static inline void onMessage(int id, const char *message, int size, void *ptr) {
             json_object *data = json_object_object_get(root, "data");
             printf("GOT OFFER FROM A NODE WE WANT TO CONNECT TO\n");
             printf("THE NODE IS %s\n", json_object_get_string(from));
-            processOffer(json_object_get_string(from), json_object_get_string(data));
+            processOffer(json_object_get_string(from),
+                         json_object_get_string(data));
         } else if (strcmp(type_str, "REJECT_CONNECTION") == 0) {
             json_object *data = json_object_object_get(root, "data");
-            printf("Connection offer rejected: %s\n", json_object_get_string(data));
+            printf("Connection offer rejected: %s\n",
+                   json_object_get_string(data));
         }
     }
 
@@ -149,19 +176,18 @@ static inline void onMessage(int id, const char *message, int size, void *ptr) {
         if (strcmp(type_str, "answer") == 0) {
             json_object *data = json_object_object_get(root, "data");
             printf("--- GOT ANSWER IN CONNECT ---\n");
-            rtcSetRemoteDescription(messageListener, json_object_get_string(data), "answer");
+            rtcSetRemoteDescription(messageListener,
+                                    json_object_get_string(data), "answer");
         } else if (strcmp(type_str, "candidate") == 0) {
             json_object *data = json_object_object_get(root, "data");
-            rtcAddRemoteCandidate(messageListener, json_object_get_string(data), NULL);
+            rtcAddRemoteCandidate(messageListener, json_object_get_string(data),
+                                  NULL);
         }
-    }
-
-    if (message_received_callback) {
-        message_received_callback(message);
     }
 }
 
-static inline void sendOfferDescriptionCallback(int pc, const char *sdp, const char *type, void *ptr) {
+static inline void sendOfferDescriptionCallback(int pc, const char *sdp,
+                                                const char *type, void *ptr) {
     const char *requestee = (const char *)ptr;
     rtcSetLocalDescription(pc, sdp);
     sendOneToOneNegotiation("offer", requestee, sdp);
@@ -172,24 +198,38 @@ static inline void onDataChannelOpen(int id, void *ptr) {
     printf("\nData channel opened\n");
     dataChannel[dataChannelCount++] = id;
     messageListener = 0;
+
+    if (message_opened_callback) {
+        message_opened_callback(id, ptr);
+    }
 }
 
-static inline void onDataChannelMessage(int id, const char *message, int size, void *ptr) {
-    printf("\n%s\n", message);
+static inline void onDataChannelMessage(int id, const char *message, int size,
+                                        void *ptr) {
+    if (message_received_callback) {
+        message_received_callback(id, message, size, ptr);
+    }
 }
 
 static inline void onDataChannelClose(int id, void *ptr) {
     printf("\nData channel closed\n");
     int found = 0;
     for (int i = 0; i < dataChannelCount - 1; i++) {
-        if (dataChannel[i] == id) found = 1;
-        if (found) dataChannel[i] = dataChannel[i + 1];
+        if (dataChannel[i] == id)
+            found = 1;
+        if (found)
+            dataChannel[i] = dataChannel[i + 1];
     }
     dataChannelCount--;
     messageListener = 0;
+
+    if (message_closed_callback) {
+        message_closed_callback(id, ptr);
+    }
 }
 
-static inline void candidateConnectPeersCallback(int pc, const char *cand, const char *mid, void *ptr) {
+static inline void candidateConnectPeersCallback(int pc, const char *cand,
+                                                 const char *mid, void *ptr) {
     const char *requestee = (const char *)ptr;
     if (cand != NULL) {
         printf("sent negotiations\n");
@@ -219,14 +259,16 @@ static void connectPeers(json_object *root) {
     rtcSetClosedCallback(dc, onDataChannelClose);
 }
 
-static inline void sendAnswerDescriptionCallback(int pc, const char *sdp, const char *type, void *ptr) {
+static inline void sendAnswerDescriptionCallback(int pc, const char *sdp,
+                                                 const char *type, void *ptr) {
     const char *requestee = (const char *)ptr;
     rtcSetLocalDescription(pc, sdp);
     sendOneToOneNegotiation("answer", requestee, sdp);
     printf("------ SEND ANSWER ------\n");
 }
 
-static inline void candidateProcessOfferCallback(int pc, const char *cand, const char *mid, void *ptr) {
+static inline void candidateProcessOfferCallback(int pc, const char *cand,
+                                                 const char *mid, void *ptr) {
     const char *requestee = (const char *)ptr;
     sendOneToOneNegotiation("candidate", requestee, cand);
 }
@@ -268,7 +310,8 @@ static bool shouldRespond(json_object *root) {
 
 static void rejectPeers(json_object *root) {
     json_object *from = json_object_object_get(root, "from");
-    sendOneToOneNegotiation("REJECT_CONNECTION", json_object_get_string(from), "Max peers connected");
+    sendOneToOneNegotiation("REJECT_CONNECTION", json_object_get_string(from),
+                            "Max peers connected");
 }
 
 static void sendNegotiation(const char *type, json_object *data) {
@@ -278,27 +321,32 @@ static void sendNegotiation(const char *type, json_object *data) {
     }
 
     json_object *root = json_object_new_object();
-    json_object_object_add(root, "protocol", json_object_new_string("one-to-room"));
+    json_object_object_add(root, "protocol",
+                           json_object_new_string("one-to-room"));
     json_object_object_add(root, "room", json_object_new_string(room));
     json_object_object_add(root, "from", json_object_new_string(username));
     json_object_object_add(root, "endpoint", json_object_new_string("any"));
     json_object_object_add(root, "type", json_object_new_string(type));
-    if (data != NULL) json_object_object_add(root, "data", data);
-    else json_object_object_add(root, "data", json_object_new_string(username));
+    if (data != NULL)
+        json_object_object_add(root, "data", data);
+    else
+        json_object_object_add(root, "data", json_object_new_string(username));
 
     const char *json_string = json_object_to_json_string(root);
 
     rtcSendMessage(ws_id, json_string, strlen(json_string));
 }
 
-static void sendOneToOneNegotiation(const char *type, const char *endpoint, const char *sdp) {
+static void sendOneToOneNegotiation(const char *type, const char *endpoint,
+                                    const char *sdp) {
     if (room[0] == '\0') {
         printf("Please provide a room code\n");
         return;
     }
 
     json_object *root = json_object_new_object();
-    json_object_object_add(root, "protocol", json_object_new_string("one-to-one"));
+    json_object_object_add(root, "protocol",
+                           json_object_new_string("one-to-one"));
     json_object_object_add(root, "room", json_object_new_string(room));
     json_object_object_add(root, "from", json_object_new_string(username));
     json_object_object_add(root, "endpoint", json_object_new_string(endpoint));

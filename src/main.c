@@ -8,7 +8,7 @@ int ws_ret_code = 0;
 char username[UUID_STR_LEN];
 char room[256] = "\0";
 
-void onMessageReceived(const char *message);
+void onMessageReceived(int id, const char *message, int size, void *ptr);
 
 int main() {
     const char *stun_server = "stun:stun.l.google.com:19302";
@@ -34,7 +34,9 @@ int main() {
 
     const char *iceServers[256];
     iceServers[0] = stun_server;
-    rtc_initialize(iceServers, ws_url, username, room, &lock, &cond, &ws_joined, &ws_ret_code, onMessageReceived);
+    rtc_initialize(iceServers, ws_url, username, room, &lock, &cond, &ws_joined,
+                   &ws_ret_code);
+    rtc_set_message_received_callback(onMessageReceived);
 
     pthread_mutex_lock(&lock);
     while (!ws_joined) {
@@ -70,6 +72,6 @@ int main() {
     return 0;
 }
 
-void onMessageReceived(const char *message) {
+void onMessageReceived(int id, const char *message, int size, void *ptr) {
     printf("\nReceived message: %s\n", message);
 }

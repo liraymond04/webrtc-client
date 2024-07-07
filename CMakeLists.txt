@@ -64,7 +64,7 @@ else()
     add_library(${PROJECT_NAME} SHARED ${SOURCES})
 endif()
 
-target_link_libraries(${PROJECT_NAME} datachannel json-c uuid ncurses)
+target_link_libraries(${PROJECT_NAME} datachannel json-c uuid)
 
 file(GLOB SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.c")
 
@@ -76,6 +76,6 @@ if (EXAMPLES)
         get_filename_component(EXE_NAME ${SOURCE_FILE} NAME_WE)
         add_executable(${EXE_NAME} ${SOURCE_FILE})
         target_include_directories(${EXE_NAME} INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-        target_link_libraries(${EXE_NAME} ${PROJECT_NAME})
+        target_link_libraries(${EXE_NAME} ${PROJECT_NAME} ncurses)
     endforeach()
 endif()

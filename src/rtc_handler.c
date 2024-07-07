@@ -2,6 +2,12 @@
 
 #define MAX_PEERS 3
 
+#ifdef DEBUG
+# define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+# define DEBUG_PRINT(...) do {} while (0)
+#endif
+
 static rtcConfiguration config;
 static int ws_id;
 static int dataChannel[MAX_PEERS];
@@ -107,13 +113,13 @@ void rtc_set_message_received_callback(void (*on_message_received)(
     message_received_callback = on_message_received;
 }
 
-void rtc_set_message_closed_callback(void (*on_message_closed)(int id,
-                                                               void *ptr)) {
+inline void
+rtc_set_message_closed_callback(void (*on_message_closed)(int id, void *ptr)) {
     message_closed_callback = on_message_closed;
 }
 
 static inline void onOpen(int id, void *ptr) {
-    printf("\nWebSocket connection opened (id: %d)\n", id);
+    DEBUG_PRINT("\nWebSocket connection opened (id: %d)\n", id);
     pthread_mutex_lock(lock);
     *ws_joined = 1;
     pthread_cond_signal(cond);
@@ -121,7 +127,7 @@ static inline void onOpen(int id, void *ptr) {
 }
 
 static inline void onClosed(int id, void *ptr) {
-    printf("\nWebSocket connection closed (id: %d)\n", id);
+    DEBUG_PRINT("\nWebSocket connection closed (id: %d)\n", id);
     pthread_mutex_lock(lock);
     *ws_joined = 1;
     *ws_ret_code = 0;
@@ -130,7 +136,7 @@ static inline void onClosed(int id, void *ptr) {
 }
 
 static inline void onError(int id, const char *error, void *ptr) {
-    fprintf(stderr, "\nWebSocket connection error (id: %d)\n", id);
+    DEBUG_PRINT("\nWebSocket connection error (id: %d)\n", id);
     pthread_mutex_lock(lock);
     *ws_joined = 1;
     *ws_ret_code = 1;
@@ -139,7 +145,7 @@ static inline void onError(int id, const char *error, void *ptr) {
 }
 
 static inline void onMessage(int id, const char *message, int size, void *ptr) {
-    printf("(id: %d) message: %s\n", id, message);
+    DEBUG_PRINT("(id: %d) message: %s\n", id, message);
 
     json_object *root = json_tokener_parse(message);
 
@@ -151,23 +157,23 @@ static inline void onMessage(int id, const char *message, int size, void *ptr) {
         const char *type_str = json_object_get_string(type);
 
         if (strcmp(type_str, "HANDLE_CONNECTION") == 0) {
-            printf("New peer wants to connect\n");
+            DEBUG_PRINT("New peer wants to connect\n");
             if (dataChannelCount < MAX_PEERS) {
                 connectPeers(root);
             } else {
-                printf("Max peers connected\n");
+                DEBUG_PRINT("Max peers connected\n");
                 rejectPeers(root);
             }
         } else if (strcmp(type_str, "offer") == 0) {
             json_object *from = json_object_object_get(root, "from");
             json_object *data = json_object_object_get(root, "data");
-            printf("GOT OFFER FROM A NODE WE WANT TO CONNECT TO\n");
-            printf("THE NODE IS %s\n", json_object_get_string(from));
+            DEBUG_PRINT("GOT OFFER FROM A NODE WE WANT TO CONNECT TO\n");
+            DEBUG_PRINT("THE NODE IS %s\n", json_object_get_string(from));
             processOffer(json_object_get_string(from),
                          json_object_get_string(data));
         } else if (strcmp(type_str, "REJECT_CONNECTION") == 0) {
             json_object *data = json_object_object_get(root, "data");
-            printf("Connection offer rejected: %s\n",
+            DEBUG_PRINT("Connection offer rejected: %s\n",
                    json_object_get_string(data));
         }
     }
@@ -175,7 +181,7 @@ static inline void onMessage(int id, const char *message, int size, void *ptr) {
     if (messageListener) {
         if (strcmp(type_str, "answer") == 0) {
             json_object *data = json_object_object_get(root, "data");
-            printf("--- GOT ANSWER IN CONNECT ---\n");
+            DEBUG_PRINT("--- GOT ANSWER IN CONNECT ---\n");
             rtcSetRemoteDescription(messageListener,
                                     json_object_get_string(data), "answer");
         } else if (strcmp(type_str, "candidate") == 0) {
@@ -191,11 +197,11 @@ static inline void sendOfferDescriptionCallback(int pc, const char *sdp,
     const char *requestee = (const char *)ptr;
     rtcSetLocalDescription(pc, sdp);
     sendOneToOneNegotiation("offer", requestee, sdp);
-    printf("------ SEND OFFER ------\n");
+    DEBUG_PRINT("------ SEND OFFER ------\n");
 }
 
 static inline void onDataChannelOpen(int id, void *ptr) {
-    printf("\nData channel opened\n");
+    DEBUG_PRINT("\nData channel opened\n");
     dataChannel[dataChannelCount++] = id;
     messageListener = 0;
 
@@ -212,7 +218,7 @@ static inline void onDataChannelMessage(int id, const char *message, int size,
 }
 
 static inline void onDataChannelClose(int id, void *ptr) {
-    printf("\nData channel closed\n");
+    DEBUG_PRINT("\nData channel closed\n");
     int found = 0;
     for (int i = 0; i < dataChannelCount - 1; i++) {
         if (dataChannel[i] == id)
@@ -232,13 +238,13 @@ static inline void candidateConnectPeersCallback(int pc, const char *cand,
                                                  const char *mid, void *ptr) {
     const char *requestee = (const char *)ptr;
     if (cand != NULL) {
-        printf("sent negotiations\n");
+        DEBUG_PRINT("sent negotiations\n");
         sendOneToOneNegotiation("candidate", requestee, cand);
     }
 }
 
 static void connectPeers(json_object *root) {
-    printf("CONNECTING PEERS\n");
+    DEBUG_PRINT("CONNECTING PEERS\n");
 
     json_object *data = json_object_object_get(root, "data");
 
@@ -248,7 +254,7 @@ static void connectPeers(json_object *root) {
 
     int dc = rtcCreateDataChannel(pc, "sendChannel");
 
-    printf("created data channel\n");
+    DEBUG_PRINT("created data channel\n");
 
     messageListener = pc;
 
@@ -264,7 +270,7 @@ static inline void sendAnswerDescriptionCallback(int pc, const char *sdp,
     const char *requestee = (const char *)ptr;
     rtcSetLocalDescription(pc, sdp);
     sendOneToOneNegotiation("answer", requestee, sdp);
-    printf("------ SEND ANSWER ------\n");
+    DEBUG_PRINT("------ SEND ANSWER ------\n");
 }
 
 static inline void candidateProcessOfferCallback(int pc, const char *cand,
@@ -280,7 +286,7 @@ static inline void processOfferDataChannelCallback(int pc, int dc, void *ptr) {
 }
 
 static void processOffer(const char *requestee, const char *remoteOffer) {
-    printf("RUNNING PROCESS OFFER\n");
+    DEBUG_PRINT("RUNNING PROCESS OFFER\n");
 
     int pc = rtcCreatePeerConnection(&config);
     rtcSetUserPointer(pc, (void *)requestee);
@@ -316,7 +322,7 @@ static void rejectPeers(json_object *root) {
 
 static void sendNegotiation(const char *type, json_object *data) {
     if (room[0] == '\0') {
-        printf("Please provide a room code\n");
+        DEBUG_PRINT("Please provide a room code\n");
         return;
     }
 
@@ -340,7 +346,7 @@ static void sendNegotiation(const char *type, json_object *data) {
 static void sendOneToOneNegotiation(const char *type, const char *endpoint,
                                     const char *sdp) {
     if (room[0] == '\0') {
-        printf("Please provide a room code\n");
+        DEBUG_PRINT("Please provide a room code\n");
         return;
     }
 

@@ -7,7 +7,7 @@ Requires a signalling server, [rustysignal](https://github.com/liraymond04/rusty
 ## Examples
 
 - `chat`: TUI chat application using ncurses, use the `help` command to see what you can do!
-- `game`: Simple GUI "game" using [olc PGE](https://github.com/Moros1138/olcPixelGameEngineC), see your friends shmovin' in real-time (or 60fps, give or take)
+- `game`: Simple GUI "game" using [olc PGE](https://github.com/Moros1138/olcPixelGameEngineC), see your friends shmovin' in real-time (or 60fps, give or take). Use the WASD keys to move around, and use Esc to exit the game.
 
 ## Building
 

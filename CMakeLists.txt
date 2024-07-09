@@ -70,12 +70,14 @@ file(GLOB SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.c")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
 
+file(GLOB_RECURSE CONTAINERS "${CMAKE_CURRENT_SOURCE_DIR}/examples/containers/*/*.c")
+
 # Build examples
 if (EXAMPLES)
     foreach(SOURCE_FILE ${SRC_FILES})
         get_filename_component(EXE_NAME ${SOURCE_FILE} NAME_WE)
-        add_executable(${EXE_NAME} ${SOURCE_FILE})
+        add_executable(${EXE_NAME} ${CONTAINERS} ${SOURCE_FILE})
         target_include_directories(${EXE_NAME} INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-        target_link_libraries(${EXE_NAME} ${PROJECT_NAME} ncurses)
+        target_link_libraries(${EXE_NAME} ${PROJECT_NAME} ncurses m X11 GL png)
     endforeach()
 endif()

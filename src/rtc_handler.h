@@ -16,6 +16,7 @@ void rtc_initialize(const char **stun_servers, const char *ws_url,
                     int *ws_ret_code);
 void rtc_handle_connection();
 void rtc_send_message(const char *message);
+void rtc_send_typed_object(const char *type, json_object *obj);
 
 void rtc_set_message_opened_callback(void (*on_message_opened)(int id,
                                                                void *ptr));

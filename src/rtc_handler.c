@@ -3,9 +3,11 @@
 #define MAX_PEERS 3
 
 #ifdef DEBUG
-# define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 #else
-# define DEBUG_PRINT(...) do {} while (0)
+#define DEBUG_PRINT(...)                                                       \
+    do {                                                                       \
+    } while (0)
 #endif
 
 static rtcConfiguration config;
@@ -103,6 +105,21 @@ void rtc_send_message(const char *message) {
     }
 }
 
+void rtc_send_typed_object(const char *type, json_object *obj) {
+    if (dataChannelCount > 0) {
+        json_object *root = json_object_new_object();
+        json_object_object_add(root, "sender",
+                               json_object_new_string(username));
+        json_object_object_add(root, "type", json_object_new_string(type));
+        json_object_object_add(root, "payload", obj);
+
+        const char *json_str = json_object_to_json_string(root);
+        for (int i = 0; i < dataChannelCount; i++) {
+            rtcSendMessage(dataChannel[i], json_str, strlen(json_str));
+        }
+    }
+}
+
 void rtc_set_message_opened_callback(void (*on_message_opened)(int id,
                                                                void *ptr)) {
     message_opened_callback = on_message_opened;
@@ -174,7 +191,7 @@ static inline void onMessage(int id, const char *message, int size, void *ptr) {
         } else if (strcmp(type_str, "REJECT_CONNECTION") == 0) {
             json_object *data = json_object_object_get(root, "data");
             DEBUG_PRINT("Connection offer rejected: %s\n",
-                   json_object_get_string(data));
+                        json_object_get_string(data));
         }
     }
 

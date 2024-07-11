@@ -6,6 +6,8 @@
 #include <time.h>
 #include <stdlib.h>
 
+#define MAX_SERVERS 100
+
 #define INPUT_HEIGHT 3
 #define MAX_INPUT 256
 #define FRAME_TIME 16667 // Time per frame in microseconds for 60fps
@@ -61,8 +63,53 @@ void onMessageClose(int id, void *ptr) {
 
 int ret = 1;
 
-int main() {
-    const char *stun_server = "stun:stun.l.google.com:19302";
+void print_usage(char *prog_name);
+void read_servers_from_file(const char *file_path, char servers[][256],
+                            int *count);
+void parse_ice_servers(const char *stun_servers, char servers[][256],
+                       int *count);
+
+int main(int argc, char *argv[]) {
+    int opt;
+    char file_path[256] = { 0 };
+    char input_servers[256] = { 0 };
+    int use_file = 0, use_stun = 0;
+
+    while ((opt = getopt(argc, argv, "f:s:")) != -1) {
+        switch (opt) {
+        case 'f':
+            strncpy(file_path, optarg, sizeof(file_path) - 1);
+            use_file = 1;
+            break;
+        case 's':
+            strncpy(input_servers, optarg, sizeof(input_servers) - 1);
+            use_stun = 1;
+            break;
+        default:
+            print_usage(argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    if (use_file && use_stun) {
+        fprintf(stderr, "Error: Cannot use both -f and -s options.\n");
+        print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    char ice_servers[MAX_SERVERS][256];
+    int count = 0;
+
+    if (use_file) {
+        read_servers_from_file(file_path, ice_servers, &count);
+    } else if (use_stun) {
+        parse_ice_servers(input_servers, ice_servers, &count);
+    } else {
+        fprintf(stderr, "Error: Either -f or -s option must be specified.\n");
+        print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
     char host[256];
     char port[256];
 
@@ -83,10 +130,8 @@ int main() {
     pthread_mutex_init(&lock, NULL);
     pthread_cond_init(&cond, NULL);
 
-    const char *iceServers[256];
-    iceServers[0] = stun_server;
-    rtc_initialize(iceServers, ws_url, username, room, &lock, &cond, &ws_joined,
-                   &ws_ret_code);
+    rtc_initialize((const char **)ice_servers, count, ws_url, username, room,
+                   &lock, &cond, &ws_joined, &ws_ret_code);
     rtc_set_message_opened_callback(onMessageOpen);
     rtc_set_message_received_callback(onMessageReceived);
     rtc_set_message_closed_callback(onMessageClose);
@@ -263,4 +308,40 @@ void reprint_messages() {
         wprintw(chat_win, "%s\n", messages[i]);
     }
     wrefresh(chat_win);
+}
+
+void print_usage(char *prog_name) {
+    fprintf(stderr, "Usage: %s [-f file_path] [-s ice_servers]\n", prog_name);
+}
+
+void read_servers_from_file(const char *file_path, char servers[][256],
+                            int *count) {
+    FILE *file = fopen(file_path, "r");
+    if (file == NULL) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    char line[256];
+    *count = 0;
+    while (fgets(line, sizeof(line), file) != NULL && *count < MAX_SERVERS) {
+        line[strcspn(line, "\n")] = 0; // Remove the newline character
+        strncpy(servers[*count], line, sizeof(servers[*count]) - 1);
+        (*count)++;
+    }
+
+    fclose(file);
+}
+
+void parse_ice_servers(const char *ice_servers, char servers[][256],
+                       int *count) {
+    char *servers_copy = strdup(ice_servers);
+    char *token = strtok(servers_copy, ",");
+    *count = 0;
+    while (token != NULL && *count < MAX_SERVERS) {
+        strncpy(servers[*count], token, sizeof(servers[*count]) - 1);
+        token = strtok(NULL, ",");
+        (*count)++;
+    }
+    free(servers_copy);
 }

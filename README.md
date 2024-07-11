@@ -6,6 +6,8 @@ Requires a signalling server, [rustysignal](https://github.com/liraymond04/rusty
 
 ## Examples
 
+Use the `-f` to specify a path to a text file with ICE servers, or `-s` with a comma separated list of ICE servers
+
 - `chat`: TUI chat application using ncurses, use the `help` command to see what you can do!
 - `game`: Simple GUI "game" using [olc PGE](https://github.com/Moros1138/olcPixelGameEngineC), see your friends shmovin' in real-time (or 60fps, give or take). Use the WASD keys to move around, and use Esc to exit the game.
 
@@ -34,5 +36,10 @@ And run one of the example applications
 # Look in the examples folder to see what you can try,
 # the executables should have the same names as their
 # respective source files
-$ ./build/chat
+#
+# To pass in ice servers with -s, specify server URLs
+# with the format specified in the libdatachannel docs
+# ex) stun:stun.l.google.com:19302
+# ex) turn:user:pass@turn.example.com:443
+$ ./build/chat -f ice_servers.txt
 ```

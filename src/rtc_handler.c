@@ -63,11 +63,12 @@ void generate_uuid(char out[UUID_STR_LEN]) {
     uuid_unparse_lower(b, out);
 }
 
-void rtc_initialize(const char **stun_servers, const char *ws_url,
-                    const char *user, const char *rm, pthread_mutex_t *lck,
-                    pthread_cond_t *cnd, int *joined, int *ret_code) {
+void rtc_initialize(const char **stun_servers, int stun_servers_count,
+                    const char *ws_url, const char *user, const char *rm,
+                    pthread_mutex_t *lck, pthread_cond_t *cnd, int *joined,
+                    int *ret_code) {
     config.iceServers = stun_servers;
-    config.iceServersCount = 1;
+    config.iceServersCount = stun_servers_count;
 
     strcpy(username, user);
     strcpy(room, rm);

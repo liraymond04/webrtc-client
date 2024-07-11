@@ -10,8 +10,8 @@
 #include <json-c/json.h>
 
 void generate_uuid(char out[UUID_STR_LEN]);
-void rtc_initialize(const char **stun_servers, const char *ws_url,
-                    const char *username, const char *room,
+void rtc_initialize(const char **stun_servers, int stun_servers_count,
+                    const char *ws_url, const char *username, const char *room,
                     pthread_mutex_t *lock, pthread_cond_t *cond, int *ws_joined,
                     int *ws_ret_code);
 void rtc_handle_connection();
